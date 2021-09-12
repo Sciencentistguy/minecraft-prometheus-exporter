@@ -259,7 +259,7 @@ async fn main() -> Result<()> {
 
     Lazy::force(&CONFIG);
 
-    let metric = warp::path("metric").and_then(|| async move {
+    let filter = warp::path("metrics").and_then(|| async move {
         if false {
             // XXX: Type inference hint, I kinda hate it.
             return Err(warp::reject());
@@ -285,6 +285,6 @@ async fn main() -> Result<()> {
     });
 
     info!(port = %CONFIG.port, "Started listening.");
-    warp::serve(metric).run(([127, 0, 0, 1], CONFIG.port)).await;
+    warp::serve(filter).run(([127, 0, 0, 1], CONFIG.port)).await;
     Ok(())
 }
