@@ -1,11 +1,18 @@
+mod config;
+
 use eyre::Result;
+use once_cell::sync::Lazy;
 use reqwest::Client;
 use serde::Deserialize;
 use std::{collections::HashMap, fmt::Write, path::Path};
 use tracing::Level;
 use tracing::*;
-
 use warp::Filter;
+
+use crate::config::Config;
+use crate::config::Server;
+
+static CONFIG: Lazy<Config> = Lazy::new(Config::open_or_create);
 
 #[derive(Debug, Deserialize)]
 struct Stats {
@@ -39,11 +46,6 @@ async fn read_json(path: impl AsRef<Path>) -> Result<Stats> {
     let file = tokio::fs::read_to_string(path.as_ref()).await?;
     let json: Stats_ = serde_json::from_str(file.as_str())?;
     Ok(json.stats)
-}
-
-#[derive(Clone)]
-struct Config {
-    paths: Vec<(String, String)>,
 }
 
 async fn get_player_name(uuid: &str) -> Result<String> {
@@ -255,21 +257,21 @@ async fn main() -> Result<()> {
             .finish(),
     )?;
 
+    Lazy::force(&CONFIG);
+
     let metric = warp::path("metric").and_then(|| async move {
         if false {
             // XXX: Type inference hint, I kinda hate it.
             return Err(warp::reject());
         }
         let mut output = String::new();
-        for (server_file_path, server_name) in vec![(
-            "/dev/shm/stats".to_owned(),
-            "the_server_to_end_all_servers".to_owned(),
-        )]
-        .iter()
-        .map(|(x, y)| (x.as_str(), y.as_str()))
+        for Server {
+            stats_root,
+            server_name,
+        } in &CONFIG.servers
         {
             output.push_str(
-                scrape_server(server_file_path, server_name)
+                scrape_server(stats_root, server_name.as_str())
                     .await
                     .map_err(|e| {
                         error!(error = ?e, "");
@@ -282,7 +284,7 @@ async fn main() -> Result<()> {
         Ok(output)
     });
 
-    info!("Started listening on "); // TODO config
-    warp::serve(metric).run(([127, 0, 0, 1], 3030)).await;
+    info!(port = %CONFIG.port, "Started listening.");
+    warp::serve(metric).run(([127, 0, 0, 1], CONFIG.port)).await;
     Ok(())
 }
