@@ -23,6 +23,8 @@ static CONFIG: Lazy<Config> = Lazy::new(|| {
         panic!("{:?}", e);
     })
 });
+static LIST_RESPONSE_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"There are (\d+) of a max of (\d+) players online: ?(.*)?$").unwrap());
 
 async fn scrape_current_online_players<W: Write>(server: &Server, writer: &mut W) -> Result<()> {
     trace!("Getting online players");
@@ -38,11 +40,9 @@ async fn scrape_current_online_players<W: Write>(server: &Server, writer: &mut W
 
     trace!(%response, "Got rcon response");
 
-    let re = Regex::new(r"There are (\d+) of a max of (\d+) players online: ?(.*)?$").unwrap();
-
     trace!("built regex");
 
-    let capts = re
+    let capts = LIST_RESPONSE_REGEX
         .captures(response.as_str())
         .ok_or_else(|| eyre::eyre!("Invalid response from `list`: {}", response))?;
     let current_players: u64 = capts[1].parse()?;
