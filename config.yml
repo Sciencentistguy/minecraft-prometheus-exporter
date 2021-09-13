@@ -1,3 +1,9 @@
 ---
 port: 9001
-servers: []
+servers:
+  - server:
+    stats_root: "/srv/minecraft/world/stats"
+    server_name: "a_minecraft_server"
+    server_ip: localhost
+    rcon_port: 25575
+    rcon_password: "password"
