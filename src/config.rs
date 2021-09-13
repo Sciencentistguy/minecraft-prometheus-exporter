@@ -16,6 +16,9 @@ pub struct Config {
 pub struct Server {
     pub stats_root: PathBuf,
     pub server_name: String,
+    pub server_ip: String,
+    pub rcon_port: u16,
+    pub rcon_password: String,
 }
 
 impl Config {
