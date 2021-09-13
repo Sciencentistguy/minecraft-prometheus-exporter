@@ -14,7 +14,12 @@ use warp::Filter;
 use crate::config::Config;
 use crate::config::Server;
 
-static CONFIG: Lazy<Config> = Lazy::new(Config::open_or_create);
+static CONFIG: Lazy<Config> = Lazy::new(|| {
+    Config::open_or_create().unwrap_or_else(|e| {
+        error!(error = ?e, "An error ocurred while opening config file");
+        panic!("{:?}", e);
+    })
+});
 
 async fn scrape_current_online_players<W: Write>(server: &Server, writer: &mut W) -> Result<()> {
     trace!("Getting online players");

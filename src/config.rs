@@ -1,9 +1,9 @@
 use std::path::Path;
 use std::path::PathBuf;
 
+use eyre::Result;
 use serde::Deserialize;
 use serde::Serialize;
-
 use tracing::*;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -29,7 +29,7 @@ impl Config {
         }
     }
 
-    pub fn open_or_create() -> Self {
+    pub fn open_or_create() -> Result<Self> {
         let path = std::env::var("MPE_CONFIG")
             .map(PathBuf::from)
             .unwrap_or_else(|_| Path::new("./config.yml").to_owned());
@@ -38,12 +38,19 @@ impl Config {
 
         if !path.is_file() {
             warn!(?path, "Config file not found. Creating a default one.");
-            let file = std::fs::File::create(&path).unwrap();
-            serde_yaml::to_writer(file, &Self::new_default()).unwrap();
+            let file = std::fs::File::create(&path)?;
+            serde_yaml::to_writer(file, &Self::new_default())?;
         }
 
-        let config_file = std::fs::File::open(&path).unwrap();
+        let config_file = std::fs::File::open(&path)?;
 
-        serde_yaml::from_reader(config_file).unwrap()
+        let config: Self = serde_yaml::from_reader(config_file)?;
+        if config.servers.is_empty() {
+            warn!(
+                "The config file does not define any servers.\
+                This program will do nothing if no servers are defined"
+            );
+        }
+        Ok(config)
     }
 }
