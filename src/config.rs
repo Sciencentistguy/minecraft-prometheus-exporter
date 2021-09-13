@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::path::PathBuf;
 
 use eyre::Result;
@@ -30,9 +29,7 @@ impl Config {
     }
 
     pub fn open_or_create() -> Result<Self> {
-        let path = std::env::var("MPE_CONFIG")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| Path::new("./config.yml").to_owned());
+        let path = &crate::OPTIONS.config_file;
 
         trace!(?path, "Opening config file");
 

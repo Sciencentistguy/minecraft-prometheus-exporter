@@ -6,7 +6,9 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Client;
 use serde::Deserialize;
+use std::path::PathBuf;
 use std::{collections::HashMap, fmt::Write, path::Path};
+use structopt::StructOpt;
 use tracing::Level;
 use tracing::*;
 use warp::Filter;
@@ -14,6 +16,7 @@ use warp::Filter;
 use crate::config::Config;
 use crate::config::Server;
 
+static OPTIONS: Lazy<Opt> = Lazy::new(Opt::from_args);
 static CONFIG: Lazy<Config> = Lazy::new(|| {
     Config::open_or_create().unwrap_or_else(|e| {
         error!(error = ?e, "An error ocurred while opening config file");
@@ -353,4 +356,10 @@ async fn main() -> Result<()> {
     info!(port = %CONFIG.port, "Started listening.");
     warp::serve(filter).run(([127, 0, 0, 1], CONFIG.port)).await;
     Ok(())
+}
+
+#[derive(Debug, StructOpt)]
+struct Opt {
+    /// The configuration file, in YAML
+    config_file: PathBuf,
 }
