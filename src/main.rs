@@ -1,20 +1,48 @@
 mod config;
 
+use std::path::PathBuf;
+use std::{collections::HashMap, fmt::Write, path::Path};
+
 use eyre::Context;
 use eyre::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Client;
 use serde::Deserialize;
-use std::path::PathBuf;
-use std::{collections::HashMap, fmt::Write, path::Path};
 use structopt::StructOpt;
 use tracing::Level;
 use tracing::*;
+use walkdir::WalkDir;
 use warp::Filter;
 
 use crate::config::Config;
 use crate::config::Server;
+
+macro_rules! prometheus_help {
+    ($str:literal) => {
+        concat!(
+            "#HELP ",
+            $str,
+            " ",
+            env!("CARGO_PKG_NAME"),
+            " v",
+            env!("CARGO_PKG_VERSION")
+        )
+    };
+}
+
+macro_rules! prometheus_type {
+    ($str:literal, $type: literal) => {
+        concat!("#TYPE ", $str, " ", $type)
+    };
+}
+
+macro_rules! write_prometheus_blurb {
+    ($target:expr, $metric:literal, $type:literal) => {
+        writeln!($target, prometheus_help!($metric))?;
+        writeln!($target, prometheus_type!($metric, $type))?;
+    };
+}
 
 static OPTIONS: Lazy<Opt> = Lazy::new(Opt::from_args);
 static CONFIG: Lazy<Config> = Lazy::new(|| {
@@ -25,6 +53,30 @@ static CONFIG: Lazy<Config> = Lazy::new(|| {
 });
 static LIST_RESPONSE_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"There are (\d+) of a max of (\d+) players online: ?(.*)?$").unwrap());
+
+async fn scrape_server_file_size(server: &Server, writer: &mut impl Write) -> Result<()> {
+    let server_root = server
+        .stats_root
+        .parent()
+        .and_then(|x| x.parent())
+        .expect("server root is stats_root/../..");
+
+    let bytes_used: u64 = WalkDir::new(server_root)
+        .into_iter()
+        .map(|x| x.and_then(|x| x.metadata()).map(|x| x.len()))
+        .collect::<Result<Vec<u64>, _>>()?
+        .into_iter()
+        .sum();
+
+    write_prometheus_blurb!(writer, "minecraft_directory_size", "gauge");
+    writeln!(
+        writer,
+        r#"minecraft_directory_size{{server="{}"}} {}"#,
+        server.server_name, bytes_used
+    )?;
+
+    Ok(())
+}
 
 async fn scrape_current_online_players<W: Write>(server: &Server, writer: &mut W) -> Result<()> {
     trace!("Getting online players");
@@ -57,22 +109,14 @@ async fn scrape_current_online_players<W: Write>(server: &Server, writer: &mut W
     //})
     //.flatten()
     //.collect();
-    writeln!(
-        writer,
-        "# HELP minecraft_online_player_count minecraft-prometheus-exporter"
-    )?;
-    writeln!(writer, "# TYPE minecraft_online_player_count gauge")?;
+    write_prometheus_blurb!(writer, "minecraft_online_player_count", "gauge");
     writeln!(
         writer,
         r#"minecraft_online_player_count{{server="{}"}} {}"#,
         server.server_name, current_players
     )?;
 
-    writeln!(
-        writer,
-        "# HELP minecraft_max_players minecraft-prometheus-exporter"
-    )?;
-    writeln!(writer, "# TYPE minecraft_max_players gauge")?;
+    write_prometheus_blurb!(writer, "minecraft_max_players", "gauge");
     writeln!(
         writer,
         r#"minecraft_max_players{{server="{}"}} {}"#,
@@ -161,12 +205,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         let json = read_json(&file.path()).await?;
         if let Some(ref dropped) = json.dropped {
             trace!("Scraping minecraft:dropped");
-            writeln!(
-                writer,
-                "# HELP minecraft_items_dropped minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_items_dropped counter")?;
-
+            write_prometheus_blurb!(writer, "minecraft_items_dropped", "counter");
             for (name, &value) in dropped {
                 writeln!(
                     writer,
@@ -179,11 +218,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         }
         if let Some(ref crafted) = json.crafted {
             trace!("Scraping minecraft:crafted");
-            writeln!(
-                writer,
-                "# HELP minecraft_items_crafted minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_items_crafted counter")?;
+            write_prometheus_blurb!(writer, "minecraft_items_crafted", "counter");
             for (name, &value) in crafted {
                 writeln!(
                     writer,
@@ -196,11 +231,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         }
         if let Some(ref killed) = json.killed {
             trace!("Scraping minecraft:killed");
-            writeln!(
-                writer,
-                "# HELP minecraft_entities_killed minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_entities_killed counter")?;
+            write_prometheus_blurb!(writer, "minecraft_entities_killed", "counter");
             for (name, &value) in killed {
                 writeln!(
                     writer,
@@ -213,11 +244,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         }
         if let Some(ref broken) = json.broken {
             trace!("Scraping minecraft:broken");
-            writeln!(
-                writer,
-                "# HELP minecraft_blocks_broken minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_blocks_broken counter")?;
+            write_prometheus_blurb!(writer, "minecraft_blocks_broken", "counter");
             for (name, &value) in broken {
                 writeln!(
                     writer,
@@ -230,11 +257,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         }
         if let Some(ref used) = json.used {
             trace!("Scraping minecraft:used");
-            writeln!(
-                writer,
-                "# HELP minecraft_items_used minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_items_used counter")?;
+            write_prometheus_blurb!(writer, "minecraft_items_used", "counter");
             for (name, &value) in used {
                 writeln!(
                     writer,
@@ -247,11 +270,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         }
         if let Some(ref mined) = json.mined {
             trace!("Scraping minecraft:mined");
-            writeln!(
-                writer,
-                "# HELP minecraft_blocks_mined minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_blocks_mined counter")?;
+            write_prometheus_blurb!(writer, "minecraft_blocks_mined", "counter");
             for (name, &value) in mined {
                 writeln!(
                     writer,
@@ -264,11 +283,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         }
         if let Some(ref custom) = json.custom {
             trace!("Scraping minecraft:custom");
-            writeln!(
-                writer,
-                "# HELP minecraft_custom minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_custom gauge")?;
+            write_prometheus_blurb!(writer, "minecraft_custom", "gauge");
             for (name, &value) in custom {
                 writeln!(
                     writer,
@@ -281,11 +296,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         }
         if let Some(ref picked_up) = json.picked_up {
             trace!("Scraping minecraft:picked_up");
-            writeln!(
-                writer,
-                "# HELP minecraft_items_picked_up minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_items_picked_up counter")?;
+            write_prometheus_blurb!(writer, "minecraft_items_picked_up", "counter");
             for (name, &value) in picked_up {
                 writeln!(
                     writer,
@@ -298,11 +309,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
         }
         if let Some(ref killed_by) = json.killed_by {
             trace!("Scraping minecraft:killed_by");
-            writeln!(
-                writer,
-                "# HELP minecraft_entities_killed_by minecraft-prometheus-exporter"
-            )?;
-            writeln!(writer, "# TYPE minecraft_entities_killed_by counter")?;
+            write_prometheus_blurb!(writer, "minecraft_entities_killed_by", "counter");
             for (name, &value) in killed_by {
                 writeln!(
                     writer,
@@ -314,6 +321,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
             }
         }
     }
+
     Ok(())
 }
 
@@ -321,7 +329,7 @@ async fn scrape_server<W: Write>(server: &Server, writer: &mut W) -> Result<()> 
 async fn main() -> Result<()> {
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
-            .with_max_level(Level::TRACE)
+            .with_max_level(Level::INFO)
             .pretty()
             .finish(),
     )?;
@@ -338,10 +346,16 @@ async fn main() -> Result<()> {
         }
         let mut output = String::new();
         for server in &CONFIG.servers {
+            scrape_server_file_size(server, &mut output)
+                .await
+                .map_err(|e| {
+                    error!(error = ?e, "An error ocurred in scrape_server_file_size");
+                    warp::reject::reject()
+                })?;
             scrape_current_online_players(server, &mut output)
                 .await
                 .map_err(|e| {
-                    error!(error = ?e, "An error ocurred in get_current_online_players");
+                    error!(error = ?e, "An error ocurred in scrape_online_players");
                     warp::reject::reject()
                 })?;
             scrape_server(server, &mut output).await.map_err(|e| {
