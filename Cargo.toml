@@ -14,7 +14,7 @@ better-panic = "0.2.0"
 clap = "2.34.0"
 eyre = "0.6.5"
 once_cell = "1.8.0"
-prometheus = "0.12.0"
+prometheus = "0.13.0"
 rcon = "0.5.2"
 regex = "1.5.4"
 reqwest = { version = "0.11.7", features = ["json"] }
