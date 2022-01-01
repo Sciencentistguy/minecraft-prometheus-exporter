@@ -7,7 +7,7 @@ A scraper for [Prometheus](https://prometheus.io/) for minecraft (1.13+) servers
 First, enable rcon on your minecraft server, by setting the following values in `server.properties`:
 
 ```
-rcon.port=<port>
+rcon.port=25575
 rcon.password=<password>
 enable-rcon=true
 ```
