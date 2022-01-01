@@ -14,7 +14,7 @@ static LIST_RESPONSE_REGEX: Lazy<Regex> =
 struct RconPlayersData {
     current_player_count: u64,
     max_players: u64,
-    current_players: Vec<String>,
+    _current_players: Vec<String>,
 }
 
 async fn get_current_online_players(server: &Server) -> Result<RconPlayersData> {
@@ -47,7 +47,7 @@ async fn get_current_online_players(server: &Server) -> Result<RconPlayersData> 
     Ok(RconPlayersData {
         current_player_count,
         max_players,
-        current_players,
+        _current_players: current_players,
     })
 }
 
