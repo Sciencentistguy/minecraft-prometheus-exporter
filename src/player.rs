@@ -37,7 +37,7 @@ async fn get_player_stats(path: impl AsRef<Path>) -> Result<PlayerStats> {
     struct Stats_ {
         stats: PlayerStats,
         #[serde(rename = "DataVersion")]
-        data_version: u64,
+        _data_version: u64,
     }
     let file = tokio::fs::read_to_string(path.as_ref()).await?;
     let json: Stats_ = serde_json::from_str(file.as_str())?;

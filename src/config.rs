@@ -21,7 +21,7 @@ pub struct Server {
 }
 
 impl Config {
-    fn new_default() -> Self {
+    fn new() -> Self {
         Self {
             port: 9001,
             servers: vec![],
@@ -29,14 +29,14 @@ impl Config {
     }
 
     pub fn open_or_create() -> Result<Self> {
-        let path = &crate::OPTIONS.config_file;
+        let path = crate::OPTIONS.config_file.as_path();
 
         trace!(?path, "Opening config file");
 
         if !path.is_file() {
             warn!(?path, "Config file not found. Creating a default one.");
             let file = std::fs::File::create(&path)?;
-            serde_yaml::to_writer(file, &Self::new_default())?;
+            serde_yaml::to_writer(file, &Self::new())?;
         }
 
         let config_file = std::fs::File::open(&path)?;
